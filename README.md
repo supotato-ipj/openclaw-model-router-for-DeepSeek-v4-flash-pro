@@ -6,7 +6,7 @@ OpenClaw 智能模型路由插件 — 根据用户消息复杂度自动选择模
 
 OpenClaw 的模型切换机制（Model Fallback / Per-agent Model / `/model` 命令）都做不到「根据任务复杂程度自动切换」。以 DeepSeek 为例，v4-pro 的价格是 v4-flash 的约 **12 倍**，但日常对话中 60-75% 是简单任务（问候、翻译、查询），全部用 Pro 是严重浪费。
 
-本插件在 Gateway 内部拦截每条消息，用 14 维关键词评分器在 **<1ms** 内判断复杂度，自动路由：
+本插件在 Gateway 内部拦截每条消息，先用 DeepSeek Flash 做 LLM 分类，失败时用 15 维关键词评分器在 **<1ms** 内兜底判断复杂度，自动路由：
 
 | 任务复杂度 | 路由模型 | 示例 |
 |:---:|------|------|
@@ -23,14 +23,29 @@ OpenClaw 的模型切换机制（Model Fallback / Per-agent Model / `/model` 命
 
 ```
 用户消息
+  → /modelauto 命令？→ 切换路由开关
   → 空消息？跳过
-  → 硬覆盖规则 1：包含 ≥2 个推理关键词？→ 直接推理
-  → 14 维关键词评分（纯 CPU，<1ms）
-  → 硬覆盖规则 2/3：结构化输出 / 超长上下文修正
+  → 会话历史注入（最近 3 条分类结果）
+  → LLM 分类（DeepSeek Flash，3 秒超时）
+     └─ 失败 → 15 维关键词评分（纯 CPU，<1ms）
+  → 连续性偏差：前 2 条都是 complex/reasoning？→ 不降级
+  → 硬覆盖规则：推理关键词 / 结构化输出 / 超长上下文 / 工具调用
   → Score → Tier 映射 → 返回 modelOverride
 ```
 
-评分器参考 FreeRouter/ClawRouter 的 14 维加权关键词方案，覆盖中英文，纯规则、零训练、零外部依赖。
+### 双层分类策略
+
+**LLM 优先，关键词兜底。** 每次消息先用 DeepSeek Flash（分类专用，token 消耗约 200）判断复杂度。如果 API 超时或失败（3 秒），自动降级到 15 维关键词评分器，零延迟、零额外成本。
+
+### 会话感知路由
+
+插件在内存中维护每条会话最近 5 条消息的分类历史：
+- **LLM 上下文注入**：分类时将最近 3 条消息的 tier 作为上下文传给 Flash，帮助它判断是否为复杂对话的延续
+- **连续性偏差**：如果最后 2 条都是 complex/reasoning，即使当前消息被判定为 simple/medium，也会自动提升到 complex。避免「好的谢谢」等简短的复杂对话回复被错误降级
+
+### 15 维关键词评分器
+
+纯 CPU、<1ms、覆盖中英文：推理标记、技术术语、代码存在、多步骤模式、领域特异性、简单指示符、命令动词、创意标记、问题复杂度、Token 数量、约束条件、代理任务、工具调用强度、输出格式、引用复杂度。
 
 ## 安装
 
@@ -94,6 +109,17 @@ Provider 必须在 OpenClaw 配置中已注册。
 - 觉得复杂消息走了 Flash → **降低** `complex.maxScore`（如 0.35）
 - 简单消息被误判为中等 → **降低**（更负）`simple.maxScore`（如 -0.4）
 
+### 会话路由开关
+
+在对话中发送命令即可动态切换（无需重启）：
+
+```
+/modelauto on     → 启用智能路由
+/modelauto off    → 关闭路由，走默认模型
+```
+
+开关状态仅限当前会话，新对话默认开启。
+
 ## 日志
 
 每次路由决策以 JSON 形式输出到 Gateway 日志：
@@ -106,6 +132,7 @@ Provider 必须在 OpenClaw 配置中已注册。
   "confidence": 0.931,
   "dimensions": { "reasoningMarkers": 0.17, "technicalTerms": 0.5, ... },
   "reason": "scoring",
+  "classifier": "llm",
   "modelOverride": "deepseek-v4-pro"
 }
 ```
@@ -125,4 +152,4 @@ journalctl --user -u openclaw-gateway -f | grep model_router_scored
 
 ## 许可证
 
-Private — 个人使用。
+MIT
