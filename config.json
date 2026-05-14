@@ -1,0 +1,24 @@
+{
+  "tiers": {
+    "simple": {
+      "maxScore": -0.3,
+      "model": "deepseek-v4-flash"
+    },
+    "medium": {
+      "maxScore": 0.15,
+      "model": "deepseek-v4-flash"
+    },
+    "complex": {
+      "maxScore": 0.5,
+      "model": "deepseek-v4-pro"
+    },
+    "reasoning": {
+      "model": "deepseek-v4-pro"
+    }
+  },
+  "overrides": {
+    "reasoningKeywordThreshold": 2,
+    "structuredOutputMinTier": "medium",
+    "largeContextChars": 8000
+  }
+}

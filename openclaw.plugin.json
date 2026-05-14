@@ -1,0 +1,12 @@
+{
+  "id": "model-router",
+  "name": "Smart Model Router",
+  "version": "1.0.0",
+  "description": "Auto-route simple tasks to Flash and complex tasks to Pro",
+  "entry": "./src/index.ts",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {}
+  }
+}

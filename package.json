@@ -1,0 +1,17 @@
+{
+  "name": "@local/model-router",
+  "version": "1.0.0",
+  "description": "Smart model router: auto-route simple tasks to Flash and complex tasks to Pro via before_model_resolve hook",
+  "type": "module",
+  "private": true,
+  "dependencies": {
+  },
+  "devDependencies": {
+    "@types/node": "^25.3.5"
+  },
+  "openclaw": {
+    "extensions": [
+      "./src/index.ts"
+    ]
+  }
+}
